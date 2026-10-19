@@ -4,12 +4,15 @@ const PROMPT_BASE = "旅遊行程規劃任務（資料將匯入「旅誌 Voyage�
 const PROMPT_START = "四、開始執行\n\n請先查證目的地與旅遊日期的相關資訊，再完成每日行程、推薦景點、預算與行前清單。"; /* 四：開始執行 */
 const FENCE = '```';
 
+/* 條件表單一開始是空白的，只有灰色提示字；只有節奏、飲食限制、預算包含與性質給合理預設值。 */
 function defaultForm() {
-  return { destination: '沖繩', startDate: '2027-01-10', endDate: '2027-01-16', origin: '台北（桃園機場）', adults: '2', kids: '0', companions: '朋友',
-    passport: '中華民國（臺灣）護照', arriveTime: '13:30', leaveTime: '15:00', stay: '那霸國際通附近', transport: '大眾運輸＋部分天數租車',
-    interests: '海景、歷史文化、在地小吃', interestsOther: '', mustGo: '沖繩美麗海水族館', food: '沖繩麵、塔可飯', dislike: '太早起床的行程', pace: '適中', limits: '無',
-    budget: 'NT$30,000–50,000', includes: '含機票與住宿', budgetType: '參考值', paid: '', special: '', other: '' };
+  return { destination: '', startDate: '', endDate: '', origin: '', adults: '', kids: '0', companions: '',
+    passport: '', arriveTime: '', leaveTime: '', stay: '', transport: '',
+    interests: '', interestsOther: '', mustGo: '', food: '', dislike: '', pace: '適中', limits: '無',
+    budget: '', includes: '含機票與住宿', budgetType: '參考值', paid: '', special: '', other: '' };
 }
+/* 這些選單沒有預設答案，一開始顯示「請選擇」 */
+const CHOOSE_FIRST = ['origin', 'adults', 'companions', 'passport', 'transport', 'budget'];
 function defaultOpts() { return { recCount: '10', maxPerDay: '不限', direct: true, extra: '' }; }
 const OPT_FIELDS = [
   ['recCount', '推薦景點數量', ['6', '8', '10', '12']],
@@ -17,13 +20,13 @@ const OPT_FIELDS = [
 ];
 const FIELDS = [
   ['基本資訊', [
-    ['destination', '目的地', 'text', '例如：沖繩'], ['startDate', '出發日期', 'date'], ['endDate', '回程日期', 'date'],
+    ['destination', '目的地', 'text', '例如：京都、首爾、巴黎'], ['startDate', '出發日期', 'date'], ['endDate', '回程日期', 'date'],
     ['origin', '出發地', 'select', ['台北（桃園機場）', '台北（松山機場）', '台中', '高雄', '其他（寫在其他注意事項）']],
     ['adults', '成人', 'select', ['1', '2', '3', '4', '5', '6', '7', '8']], ['kids', '兒童', 'select', ['0', '1', '2', '3', '4']],
     ['companions', '同行者', 'select', ['獨自旅行', '情侶或夫妻', '朋友', '家庭（含小孩）', '家庭（含長輩）', '公司或團體']],
     ['passport', '護照類型', 'select', ['中華民國（臺灣）護照', '香港特區護照', '澳門特區護照', '中國大陸護照', '其他（寫在其他注意事項）']],
     ['arriveTime', '去程抵達時間', 'time'], ['leaveTime', '回程出發時間', 'time'],
-    ['stay', '住宿地點或區域', 'text', '例如：那霸國際通附近'],
+    ['stay', '住宿地點或區域', 'text', '例如：市中心、車站附近'],
     ['transport', '交通方式', 'select', ['大眾運輸為主', '租車自駕', '大眾運輸＋部分天數租車', '包車或計程車']]]],
   ['個人偏好', [
     ['interests', '主要興趣（可複選）', 'multi', ['自然風景', '海景', '歷史文化', '在地小吃', '美食餐廳', '購物', '攝影', '親子', '主題樂園', '溫泉', '夜生活', '戶外活動'], 'full'],
@@ -38,16 +41,17 @@ const FIELDS = [
     ['special', '希望加入的特殊活動', 'text', '例如：浮潛、和服體驗', 'full'], ['other', '其他注意事項', 'text', '', 'full']]]
 ];
 
+/* 格式範例只示範欄位，內容一律用佔位文字，避免影響 AI 對目的地的判斷 */
 const OUTPUT_EXAMPLE = {
   format: 'voyage-trip/1',
-  trip: { name: '沖繩海島七日', destination: '沖繩', lat: 26.21, lng: 127.68, startDate: '2027-01-10', endDate: '2027-01-16' },
-  days: [{ date: '2027-01-10', theme: '抵達那霸・國際通', spots: [
-    { time: '17:00', name: '國際通', desc: '那霸最熱鬧的購物大街', note: '傍晚後比較熱鬧', category: '其他', dur: 90, cost: 0, lat: 26.215, lng: 127.6869 }] }],
-  recommendations: [{ name: '識名園', type: '特色探索', area: '那霸', category: '門票', desc: '琉球王家的別邸庭園', dur: 60, cost: 200, lat: 26.205, lng: 127.713 }],
-  budget: { cap: 70000, items: [{ name: '台北—沖繩來回機票 2 人', category: '交通', amount: 16000, basis: '公開參考價格，以查詢當日匯率換算' }] },
-  checklist: [{ group: '證件與金錢', text: '護照' }],
-  pending: ['首里城的開放範圍與門票'],
-  sources: [{ title: '景點官方網站名稱', url: 'https://example.com/' }]
+  trip: { name: '旅程名稱', destination: '目的地', lat: 0.0, lng: 0.0, startDate: 'YYYY-MM-DD', endDate: 'YYYY-MM-DD' },
+  days: [{ date: 'YYYY-MM-DD', theme: '當天主題', spots: [
+    { time: 'HH:MM', name: '景點名稱', desc: '一句話說明為什麼值得去', note: '提醒或注意事項', category: '門票', dur: 90, cost: 0, lat: 0.0, lng: 0.0 }] }],
+  recommendations: [{ name: '推薦景點名稱', type: '特色探索', area: '所在區域', category: '門票', desc: '一句話說明', dur: 60, cost: 0, lat: 0.0, lng: 0.0 }],
+  budget: { cap: 0, items: [{ name: '支出項目，例如來回機票', category: '交通', amount: 0, basis: '估算依據與匯率' }] },
+  checklist: [{ group: '證件與金錢', text: '物品名稱' }],
+  pending: ['出發前需要確認的事項'],
+  sources: [{ title: '網頁名稱', url: 'https://…' }]
 };
 const outputSpec = n => `五、輸出格式
 
@@ -89,7 +93,7 @@ function buildPrompt() {
 旅遊日期：${f.startDate && f.endDate ? `${f.startDate} 至 ${f.endDate}` : ''}
 旅遊天數：${span}
 出發地：${v('origin')}
-旅遊人數及同行者組成：成人 ${v('adults')} 位${v('kids') && v('kids') !== '0' ? `、兒童 ${v('kids')} 位` : ''}，${v('companions')}
+旅遊人數及同行者組成：${[v('adults') ? `成人 ${v('adults')} 位` : '', v('kids') && v('kids') !== '0' ? `兒童 ${v('kids')} 位` : '', v('companions')].filter(Boolean).join('、')}
 國籍／護照類型（供入境規定判定）：${v('passport')}
 抵達及離開時間：去程 ${v('arriveTime') || '未定'} 抵達，回程 ${v('leaveTime') || '未定'} 出發
 住宿地點或區域：${v('stay')}
@@ -159,7 +163,7 @@ function fieldHTML([key, label, type, extra, cls]) {
       `<label class="chip" for="${id}-${i}"><input type="checkbox" id="${id}-${i}" data-fkey="${key}" data-multi="1" value="${o}" ${picked.includes(o) ? 'checked' : ''}><span>${o}</span></label>`).join('')}</div></div>`;
   }
   const input = type === 'select'
-    ? `<select class="field" id="${id}" data-fkey="${key}">${(extra.includes(val) || !val ? extra : [val, ...extra]).map(o => `<option ${o === val ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`
+    ? `<select class="field" id="${id}" data-fkey="${key}">${CHOOSE_FIRST.includes(key) ? `<option value="" ${val ? '' : 'selected'}>請選擇</option>` : ''}${(extra.includes(val) || !val ? extra : [val, ...extra]).map(o => `<option ${o === val ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`
     : `<input class="field" type="${type}" id="${id}" data-fkey="${key}" value="${esc(val)}" ${extra ? `placeholder="${esc(extra)}"` : ''}>`;
   return `<label class="lbl-field ${cls || ''}" for="${id}">${label}${input}</label>`;
 }
@@ -185,21 +189,22 @@ function aiHTML() {
     <div class="page-intro"><div><h2>AI 行程規劃</h2><p>三個步驟，讓 AI 先替你起草整趟旅程。</p></div></div>
     <ol class="ai-steps">
       <li class="ai-step" id="step1"><span class="step-no">1</span><div class="step-body"><h3>填寫旅遊條件</h3>
-        <p class="step-note">已先填入沖繩的範例，直接修改即可。不確定的欄位可以留空，AI 會視需要詢問。填好後按下方按鈕，條件才會帶入提示詞。</p>
+        <p class="step-note">目的地與日期必填，其他不確定的欄位可以留空，AI 會視需要詢問。填好後按下方按鈕，條件才會帶入提示詞。</p>
         ${FIELDS.map(([g, fs]) => `<fieldset class="fset"><legend>${g}</legend><div class="fgrid">${fs.map(fieldHTML).join('')}</div></fieldset>`).join('')}
         ${ui.formError ? `<div class="alert over">${esc(ui.formError)}</div>` : ''}
         <div class="actions"><button class="btn primary" data-act="ai-confirm" id="confirm-btn">${state.confirmed ? '套用修改到提示詞' : '確認條件，產生提示詞'}</button>
+          <button class="btn ghost" data-act="ai-clear-form">清空條件</button>
           <span class="hint" id="confirm-state">${confirmState()}</span></div>
       </div></li>
       <li class="ai-step" id="step2"><span class="step-no">2</span><div class="step-body"><h3>確認提示詞，複製給 AI</h3>
         ${state.confirmed ? promptDocHTML() : `<div class="locked-box">確認上方的旅遊條件後，這裡會產生要交給 AI 的提示詞。</div>`}
       </div></li>
       <li class="ai-step"><span class="step-no">3</span><div class="step-body"><h3>貼上 AI 的回覆並匯入</h3>
-        <p class="step-note">整段回覆直接貼上就好，網頁會自動找出最後的 JSON 段落；也可以上傳 AI 給你的 .json 或 .txt 檔案。還沒跑 AI 的話，可以先載入範例回覆試試看。</p>
+        <p class="step-note">整段回覆直接貼上就好，網頁會自動找出最後的 JSON 段落；也可以上傳 AI 給你的 .json 或 .txt 檔案。還沒跑 AI 的話，可以先載入沖繩七日的示範回覆，看看匯入後的樣子。</p>
         <textarea class="field" id="ai-reply" rows="7" placeholder="把 AI 的完整回覆貼在這裡" aria-label="AI 的回覆">${esc(ui.aiText)}</textarea>
         <div class="actions"><button class="btn primary" data-act="ai-parse">讀取並預覽</button>
           <label class="btn" for="ai-file">上傳檔案<input type="file" accept=".json,.txt,.md,application/json,text/plain" id="ai-file" data-import="1" hidden></label>
-          <button class="btn ghost" data-act="ai-sample">載入範例回覆</button></div>
+          <button class="btn ghost" data-act="ai-sample">載入示範回覆（沖繩）</button></div>
         ${result}
       </div></li>
     </ol>

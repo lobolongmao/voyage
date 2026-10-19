@@ -37,6 +37,10 @@ function save() { if (!storageOK) return true; try { localStorage.setItem(KEY, J
 
 let state = load() || { form: defaultForm(), trip: null };
 state.form = { ...defaultForm(), ...(state.form || {}) };
+/* 舊版會預先填入沖繩的範例條件；偵測到原封不動的範例就清空，避免被帶去錯的目的地 */
+if (state.form.destination === '沖繩' && state.form.stay === '那霸國際通附近' && state.form.mustGo === '沖繩美麗海水族館') {
+  state.form = defaultForm(); state.confirmed = null;
+}
 state.promptOpts = { ...defaultOpts(), ...(state.promptOpts || {}) };
 state.confirmed = state.confirmed || null;
 if (state.trip) { state.trip.recs = state.trip.recs || []; state.trip.pending = state.trip.pending || []; state.trip.sources = state.trip.sources || []; }
@@ -395,6 +399,7 @@ document.addEventListener('click', e => {
       try { navigator.clipboard.writeText(text).then(() => toast('已複製提示詞，貼到 AI 的對話框就可以開始。'), fallback); } catch (err) { fallback(); }
       return;
     }
+    case 'ai-clear-form': state.form = defaultForm(); state.confirmed = null; ui.formError = ''; save(); toast('條件已清空，可以重新填寫。'); break;
     case 'ai-confirm': {
       const f = state.form;
       if (!String(f.destination || '').trim()) { ui.formError = '請先填寫目的地。'; break; }
